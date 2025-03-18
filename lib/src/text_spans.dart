@@ -37,7 +37,11 @@ class MarkdownTextSpan {
   InlineSpan createSpan(MarkdownElement element) {
     switch (element.type) {
       case MarkdownElementType.paragraph:
-        return TextSpan(text: element.content, style: defaultStyle);
+        // For paragraphs, parse the inline elements
+        return TextSpan(
+          children: parseInlineElements(element.content),
+          style: defaultStyle,
+        );
       case MarkdownElementType.heading1:
         return TextSpan(text: element.content, style: headingStyle1);
       case MarkdownElementType.heading2:
@@ -108,102 +112,115 @@ class MarkdownTextSpan {
   List<InlineSpan> parseInlineElements(String text) {
     List<InlineSpan> spans = [];
 
-    // Simple regex-based parsing for basic inline elements
-    // Bold
+    // Improved regex patterns
+    // Bold - match text between double asterisks
     final boldRegex = RegExp(r'\*\*(.*?)\*\*');
-    // Italic
-    final italicRegex = RegExp(r'\*(.*?)\*');
+    // Italic - match text between single asterisks, ensuring they're not part of bold markers
+    final italicRegex = RegExp(r'(?<!\*)\*(?!\*)(.*?)(?<!\*)\*(?!\*)');
     // Link
     final linkRegex = RegExp(r'\[(.*?)\]\((.*?)\)');
     // Inline code
     final codeRegex = RegExp(r'`(.*?)`');
 
-    String remaining = text;
     int currentIndex = 0;
 
-    while (currentIndex < remaining.length) {
-      // Check for bold text
-      final boldMatch = boldRegex.firstMatch(remaining.substring(currentIndex));
-      final italicMatch = italicRegex.firstMatch(
-        remaining.substring(currentIndex),
-      );
-      final linkMatch = linkRegex.firstMatch(remaining.substring(currentIndex));
-      final codeMatch = codeRegex.firstMatch(remaining.substring(currentIndex));
+    while (currentIndex < text.length) {
+      // Find all matches
+      final boldMatches = boldRegex.allMatches(text.substring(currentIndex));
+      final italicMatches =
+          italicRegex.allMatches(text.substring(currentIndex));
+      final linkMatches = linkRegex.allMatches(text.substring(currentIndex));
+      final codeMatches = codeRegex.allMatches(text.substring(currentIndex));
 
-      // Find the closest match
-      int? boldStart = boldMatch?.start;
-      int? italicStart = italicMatch?.start;
-      int? linkStart = linkMatch?.start;
-      int? codeStart = codeMatch?.start;
+      // Find the earliest match
+      Match? earliestMatch;
+      String matchType = '';
 
-      // If no matches, add remaining text
-      if (boldStart == null &&
-          italicStart == null &&
-          linkStart == null &&
-          codeStart == null) {
+      for (final match in boldMatches) {
+        if (earliestMatch == null || match.start < earliestMatch.start) {
+          earliestMatch = match;
+          matchType = 'bold';
+        }
+      }
+
+      for (final match in italicMatches) {
+        if (earliestMatch == null || match.start < earliestMatch.start) {
+          earliestMatch = match;
+          matchType = 'italic';
+        }
+      }
+
+      for (final match in linkMatches) {
+        if (earliestMatch == null || match.start < earliestMatch.start) {
+          earliestMatch = match;
+          matchType = 'link';
+        }
+      }
+
+      for (final match in codeMatches) {
+        if (earliestMatch == null || match.start < earliestMatch.start) {
+          earliestMatch = match;
+          matchType = 'code';
+        }
+      }
+
+      // No matches found, add remaining text
+      if (earliestMatch == null) {
         spans.add(
-          TextSpan(
-            text: remaining.substring(currentIndex),
-            style: defaultStyle,
-          ),
-        );
+            TextSpan(text: text.substring(currentIndex), style: defaultStyle));
         break;
       }
 
-      // Find the earliest match
-      int? earliestStart;
-      if (boldStart != null) earliestStart = boldStart;
-      if (italicStart != null &&
-          (earliestStart == null || italicStart < earliestStart))
-        earliestStart = italicStart;
-      if (linkStart != null &&
-          (earliestStart == null || linkStart < earliestStart))
-        earliestStart = linkStart;
-      if (codeStart != null &&
-          (earliestStart == null || codeStart < earliestStart))
-        earliestStart = codeStart;
-
       // Add text before the match
-      if (earliestStart! > 0) {
-        spans.add(
-          TextSpan(
-            text: remaining.substring(
-              currentIndex,
-              currentIndex + earliestStart,
-            ),
-            style: defaultStyle,
-          ),
-        );
+      if (earliestMatch.start > 0) {
+        spans.add(TextSpan(
+          text:
+              text.substring(currentIndex, currentIndex + earliestMatch.start),
+          style: defaultStyle,
+        ));
       }
 
-      // Handle the match
-      if (earliestStart == boldStart && boldMatch != null) {
-        spans.add(TextSpan(text: boldMatch.group(1), style: boldStyle));
-        currentIndex += boldMatch.end;
-      } else if (earliestStart == italicStart && italicMatch != null) {
-        spans.add(TextSpan(text: italicMatch.group(1), style: italicStyle));
-        currentIndex += italicMatch.end;
-      } else if (earliestStart == linkStart && linkMatch != null) {
-        final String linkText = linkMatch.group(1) ?? '';
-        final String linkUrl = linkMatch.group(2) ?? '';
-        spans.add(
-          TextSpan(
-            text: linkText,
-            style: defaultStyle.copyWith(
-              color: linkColor,
-              decoration: TextDecoration.underline,
+      // Process the match based on type
+      switch (matchType) {
+        case 'bold':
+          spans.add(TextSpan(
+            text: earliestMatch.group(1),
+            style: boldStyle,
+          ));
+          break;
+        case 'italic':
+          spans.add(TextSpan(
+            text: earliestMatch.group(1),
+            style: italicStyle,
+          ));
+          break;
+        case 'link':
+          final linkText = earliestMatch.group(1) ?? '';
+          final linkUrl = earliestMatch.group(2) ?? '';
+          spans.add(
+            TextSpan(
+              text: linkText,
+              style: defaultStyle.copyWith(
+                color: linkColor,
+                decoration: TextDecoration.underline,
+              ),
+              recognizer: onLinkTap != null
+                  ? (TapGestureRecognizer()..onTap = () => onLinkTap!())
+                  : null,
+              semanticsLabel: 'Link to $linkUrl',
             ),
-            recognizer: onLinkTap != null
-                ? (TapGestureRecognizer()..onTap = () => onLinkTap!())
-                : null,
-            semanticsLabel: 'Link to $linkUrl',
-          ),
-        );
-        currentIndex += linkMatch.end;
-      } else if (earliestStart == codeStart && codeMatch != null) {
-        spans.add(TextSpan(text: codeMatch.group(1), style: codeStyle));
-        currentIndex += codeMatch.end;
+          );
+          break;
+        case 'code':
+          spans.add(TextSpan(
+            text: earliestMatch.group(1),
+            style: codeStyle,
+          ));
+          break;
       }
+
+      // Move past this match
+      currentIndex += earliestMatch.end;
     }
 
     return spans;
