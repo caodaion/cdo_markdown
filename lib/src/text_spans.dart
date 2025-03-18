@@ -112,7 +112,7 @@ class MarkdownTextSpan {
     // Bold
     final boldRegex = RegExp(r'\*\*(.*?)\*\*');
     // Italic
-    final italicRegex = RegExp(r'\*(.*?)\*');
+    final italicRegex = RegExp(r'\*(.*?)\*(?!\*)');
     // Link
     final linkRegex = RegExp(r'\[(.*?)\]\((.*?)\)');
     // Inline code
@@ -124,85 +124,115 @@ class MarkdownTextSpan {
     while (currentIndex < remaining.length) {
       // Check for bold text
       final boldMatch = boldRegex.firstMatch(remaining.substring(currentIndex));
-      final italicMatch = italicRegex.firstMatch(
-        remaining.substring(currentIndex),
-      );
+      final boldStart = boldMatch?.start ?? -1;
+      final boldEnd = boldMatch != null ? boldMatch.end : -1;
+
+      // Check for italic text (avoid matching inside bold)
+      final italicMatch =
+          italicRegex.firstMatch(remaining.substring(currentIndex));
+      final italicStart = italicMatch?.start ?? -1;
+      final italicEnd = italicMatch != null ? italicMatch.end : -1;
+
+      // Check for links
       final linkMatch = linkRegex.firstMatch(remaining.substring(currentIndex));
+      final linkStart = linkMatch?.start ?? -1;
+      final linkEnd = linkMatch != null ? linkMatch.end : -1;
+
+      // Check for inline code
       final codeMatch = codeRegex.firstMatch(remaining.substring(currentIndex));
+      final codeStart = codeMatch?.start ?? -1;
+      final codeEnd = codeMatch != null ? codeMatch.end : -1;
 
-      // Find the closest match
-      int? boldStart = boldMatch?.start;
-      int? italicStart = italicMatch?.start;
-      int? linkStart = linkMatch?.start;
-      int? codeStart = codeMatch?.start;
+      // Find the earliest match
+      final matches = [
+        if (boldStart >= 0)
+          {
+            'type': 'bold',
+            'start': boldStart,
+            'end': boldEnd,
+            'match': boldMatch!
+          },
+        if (italicStart >= 0)
+          {
+            'type': 'italic',
+            'start': italicStart,
+            'end': italicEnd,
+            'match': italicMatch!
+          },
+        if (linkStart >= 0)
+          {
+            'type': 'link',
+            'start': linkStart,
+            'end': linkEnd,
+            'match': linkMatch!
+          },
+        if (codeStart >= 0)
+          {
+            'type': 'code',
+            'start': codeStart,
+            'end': codeEnd,
+            'match': codeMatch!
+          },
+      ];
 
-      // If no matches, add remaining text
-      if (boldStart == null &&
-          italicStart == null &&
-          linkStart == null &&
-          codeStart == null) {
-        spans.add(
-          TextSpan(
-            text: remaining.substring(currentIndex),
-            style: defaultStyle,
-          ),
-        );
+      if (matches.isEmpty) {
+        // No matches found, add the rest of the text
+        spans.add(TextSpan(
+          text: remaining.substring(currentIndex),
+          style: defaultStyle,
+        ));
         break;
       }
 
-      // Find the earliest match
-      int? earliestStart;
-      if (boldStart != null) earliestStart = boldStart;
-      if (italicStart != null &&
-          (earliestStart == null || italicStart < earliestStart))
-        earliestStart = italicStart;
-      if (linkStart != null &&
-          (earliestStart == null || linkStart < earliestStart))
-        earliestStart = linkStart;
-      if (codeStart != null &&
-          (earliestStart == null || codeStart < earliestStart))
-        earliestStart = codeStart;
+      // Sort matches by start position
+      matches.sort((a, b) => (a['start'] as int).compareTo(b['start'] as int));
+      final earliestMatch = matches.first;
+      final earliestStart = earliestMatch['start'] as int;
 
       // Add text before the match
-      if (earliestStart! > 0) {
-        spans.add(
-          TextSpan(
-            text: remaining.substring(
-              currentIndex,
-              currentIndex + earliestStart,
-            ),
-            style: defaultStyle,
-          ),
-        );
+      if (earliestStart > 0) {
+        spans.add(TextSpan(
+          text: remaining.substring(currentIndex, currentIndex + earliestStart),
+          style: defaultStyle,
+        ));
       }
 
-      // Handle the match
-      if (earliestStart == boldStart && boldMatch != null) {
-        spans.add(TextSpan(text: boldMatch.group(1), style: boldStyle));
-        currentIndex += boldMatch.end;
-      } else if (earliestStart == italicStart && italicMatch != null) {
-        spans.add(TextSpan(text: italicMatch.group(1), style: italicStyle));
-        currentIndex += italicMatch.end;
-      } else if (earliestStart == linkStart && linkMatch != null) {
-        final String linkText = linkMatch.group(1) ?? '';
-        final String linkUrl = linkMatch.group(2) ?? '';
-        spans.add(
-          TextSpan(
-            text: linkText,
-            style: defaultStyle.copyWith(
-              color: linkColor,
-              decoration: TextDecoration.underline,
+      // Process the match
+      switch (earliestMatch['type']) {
+        case 'bold':
+          final match = earliestMatch['match'] as RegExpMatch;
+          spans.add(TextSpan(text: match.group(1), style: boldStyle));
+          currentIndex += match.end;
+          break;
+        case 'italic':
+          final match = earliestMatch['match'] as RegExpMatch;
+          spans.add(TextSpan(text: match.group(1), style: italicStyle));
+          currentIndex += match.end;
+          break;
+        case 'link':
+          final match = earliestMatch['match'] as RegExpMatch;
+          final linkText = match.group(1) ?? '';
+          final linkUrl = match.group(2) ?? '';
+          spans.add(
+            TextSpan(
+              text: linkText,
+              style: defaultStyle.copyWith(
+                color: linkColor,
+                decoration: TextDecoration.underline,
+              ),
+              recognizer: onLinkTap != null
+                  ? (TapGestureRecognizer()..onTap = () => onLinkTap!())
+                  : null,
+              semanticsLabel: 'Link to $linkUrl',
             ),
-            recognizer: onLinkTap != null
-                ? (TapGestureRecognizer()..onTap = () => onLinkTap!())
-                : null,
-            semanticsLabel: 'Link to $linkUrl',
-          ),
-        );
-        currentIndex += linkMatch.end;
-      } else if (earliestStart == codeStart && codeMatch != null) {
-        spans.add(TextSpan(text: codeMatch.group(1), style: codeStyle));
-        currentIndex += codeMatch.end;
+          );
+          currentIndex += match.end;
+          break;
+        case 'code':
+          final match = earliestMatch['match'] as RegExpMatch;
+          spans.add(TextSpan(text: match.group(1), style: codeStyle));
+          currentIndex += match.end;
+          break;
       }
     }
 

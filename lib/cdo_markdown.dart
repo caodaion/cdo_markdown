@@ -92,7 +92,7 @@ class CDOMarkdown extends StatelessWidget {
       codeStyle: code,
       blockquoteStyle: blockquote,
       linkColor: link,
-      onLinkTap: onLinkTap != null ? () => onLinkTap!("url") : null,
+      onLinkTap: onLinkTap != null ? () => onLinkTap!('') : null,
     );
 
     // Build widgets from parsed elements
@@ -167,6 +167,44 @@ class CDOMarkdown extends StatelessWidget {
               ),
             ),
           );
+          break;
+
+        case MarkdownElementType.paragraph:
+          // For paragraphs, we need to parse inline formatting
+          widgets.add(Text.rich(
+            TextSpan(
+              children: markdownTextSpan.parseInlineElements(element.content),
+              style: defaultStyle,
+            ),
+          ));
+          break;
+
+        case MarkdownElementType.heading1:
+        case MarkdownElementType.heading2:
+        case MarkdownElementType.heading3:
+        case MarkdownElementType.heading4:
+        case MarkdownElementType.heading5:
+        case MarkdownElementType.heading6:
+          // Also parse inline formatting in headings
+          final TextStyle headingStyle =
+              element.type == MarkdownElementType.heading1
+                  ? headingStyle1
+                  : element.type == MarkdownElementType.heading2
+                      ? headingStyle2
+                      : element.type == MarkdownElementType.heading3
+                          ? headingStyle3
+                          : element.type == MarkdownElementType.heading4
+                              ? headingStyle4
+                              : element.type == MarkdownElementType.heading5
+                                  ? headingStyle5
+                                  : headingStyle6;
+
+          widgets.add(Text.rich(
+            TextSpan(
+              children: markdownTextSpan.parseInlineElements(element.content),
+              style: headingStyle,
+            ),
+          ));
           break;
 
         default:

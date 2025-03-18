@@ -171,9 +171,73 @@ class MarkdownParser {
 
   /// Parse inline elements like bold, italic, links, etc.
   String _parseInlineElements(String text) {
-    // For simplicity, we're returning the raw text, but this is where you would
-    // parse inline elements like bold, italic, links, etc.
+    // Process inline formatting like bold, italic, etc.
+    // We'll keep the raw markdown markers and let the span builder handle them
+    // This approach allows us to have nested formatting
     return text;
+  }
+
+  /// Process and extract inline formatting like bold, italic etc. from text
+  Map<String, List<Map<String, dynamic>>> processInlineFormatting(String text) {
+    // Extract bold text
+    final boldRegex = RegExp(r'\*\*(.*?)\*\*');
+    final boldMatches = boldRegex.allMatches(text).map((match) {
+      return {
+        'start': match.start,
+        'end': match.end,
+        'text': match.group(1)!,
+      };
+    }).toList();
+
+    // Extract italic text
+    final italicRegex = RegExp(r'\*(.*?)\*');
+    final italicMatches = italicRegex
+        .allMatches(text)
+        .map((match) {
+          // Avoid matching bold text as italic
+          if (match.start > 0 &&
+              text[match.start - 1] == '*' &&
+              match.end < text.length &&
+              text[match.end] == '*') {
+            return null;
+          }
+          return {
+            'start': match.start,
+            'end': match.end,
+            'text': match.group(1)!,
+          };
+        })
+        .where((item) => item != null)
+        .cast<Map<String, dynamic>>()
+        .toList();
+
+    // Extract links
+    final linkRegex = RegExp(r'\[(.*?)\]\((.*?)\)');
+    final linkMatches = linkRegex.allMatches(text).map((match) {
+      return {
+        'start': match.start,
+        'end': match.end,
+        'text': match.group(1)!,
+        'url': match.group(2)!,
+      };
+    }).toList();
+
+    // Extract inline code
+    final codeRegex = RegExp(r'`(.*?)`');
+    final codeMatches = codeRegex.allMatches(text).map((match) {
+      return {
+        'start': match.start,
+        'end': match.end,
+        'text': match.group(1)!,
+      };
+    }).toList();
+
+    return {
+      'bold': boldMatches,
+      'italic': italicMatches,
+      'link': linkMatches,
+      'code': codeMatches,
+    };
   }
 
   /// Get the appropriate heading type based on level
