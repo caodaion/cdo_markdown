@@ -1,0 +1,17 @@
+name: cdo_markdown
+description: A markdown rendering package for Cao Dai ON applications
+version: 0.1.0
+homepage: https://caodaion.org
+
+environment:
+  sdk: ">=2.17.0 <3.0.0"
+  flutter: ">=2.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
