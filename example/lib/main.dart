@@ -42,7 +42,7 @@ class _MarkdownExampleScreenState extends State<MarkdownExampleScreen> {
 This is regular text
 
 ## Links
-[Visit Cao Dai ON](https://caodaion.org)
+[Visit Cao Dai ON](https://www.caodaion.com)
 
 ## Code
 Inline `code` example
